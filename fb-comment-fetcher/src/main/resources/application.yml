@@ -1,0 +1,14 @@
+spring:
+  application:
+    name: demo
+
+app:
+  fb:
+    page-id: ${FB_PAGE_ID:681857498348124}
+    access-token: "REDACTED"N:EAAPADKDZBuxkBPYZAKHqE9kCXxts8UDpzHKjXxNFubQxRwMk4iYF3kvHz7AFsWWj9zxQwCo5rLHZA5MK5Jytv1w1pZBjVWRGZCOjsBYZAmcrJo6wEeMJEYCj37wvD1bvrLBvKYZAZAos2aqlMdZAlB8oeH3f8NBcZAMYHdvvEGONnDZCCf71aQnkFgqZCywFKUYiYAmW59N4}
+    api-version: "REDACTED"RSION:v21.0}
+    fetch-interval-seconds: ${FB_FETCH_INTERVAL:60}
+
+google:
+  sheetId: ${GOOGLE_SHEET_ID:}
+  range: ${GOOGLE_SHEET_RANGE:Sheet1!A:G}

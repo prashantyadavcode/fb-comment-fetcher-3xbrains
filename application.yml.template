@@ -1,0 +1,23 @@
+# Facebook Comment Fetcher Configuration Template
+# Copy this file to application.yml and fill in your actual values
+
+facebook:
+  accessToken: ${FACEBOOK_ACCESS_TOKEN:your-facebook-access-token-here}
+  pageId: ${FACEBOOK_PAGE_ID:your-facebook-page-id-here}
+  syncInterval: ${FACEBOOK_SYNC_INTERVAL:300000}  # 5 minutes in milliseconds
+
+google:
+  sheetId: ${GOOGLE_SHEET_ID:your-google-sheet-id-here}
+  range: ${GOOGLE_SHEET_RANGE:Sheet1!A:G}
+
+# RestTemplate configuration
+rest:
+  connectTimeout: 15000  # 15 seconds
+  readTimeout: 30000     # 30 seconds
+
+# Logging configuration
+logging:
+  level:
+    com.webhook_wrapper: INFO
+    com.google.api: INFO
+    org.springframework: INFO

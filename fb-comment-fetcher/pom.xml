@@ -80,6 +80,12 @@
             <artifactId>google-http-client-gson</artifactId>
             <version>1.43.3</version>
         </dependency>
+
+        <!-- Spring Boot Redis -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
 	</dependencies>
 
 	<build>

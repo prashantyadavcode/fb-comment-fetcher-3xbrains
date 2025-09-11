@@ -12,6 +12,7 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
+import java.io.FileInputStream;
 import java.io.IOException;
 import java.util.List;
 
@@ -43,8 +44,12 @@ public class SheetsAppender {
         logger.info("Initializing Google Sheets client for sheet: {}", sheetId);
         
         try {
-            GoogleCredentials creds = GoogleCredentials.getApplicationDefault()
-                    .createScoped(List.of("https://www.googleapis.com/auth/spreadsheets"));
+            // Load service account credentials from JSON file
+            GoogleCredentials creds;
+            try (java.io.FileInputStream serviceAccountStream = new java.io.FileInputStream("service-account-key.json")) {
+                creds = GoogleCredentials.fromStream(serviceAccountStream)
+                        .createScoped(List.of("https://www.googleapis.com/auth/spreadsheets"));
+            }
 
             this.sheets = new Sheets.Builder(
                     GoogleNetHttpTransport.newTrustedTransport(),
@@ -85,7 +90,8 @@ public class SheetsAppender {
      * Appends a new row to the configured Google Sheet
      */
     public void appendRow(String timestamp, String pageId, String commentId,
-                         String name, String fromId, String message, String phone) throws IOException {
+                         String name, String fromId, String message, String phone,
+                         String postMessage, String postUrl, String postCreatedTime) throws IOException {
         if (!initialized) {
             throw new IOException("Google Sheets integration not initialized");
         }
@@ -94,7 +100,8 @@ public class SheetsAppender {
                     sheetId, timestamp, pageId, commentId);
         
         try {
-            List<Object> row = List.of(timestamp, pageId, commentId, name, fromId, message, phone);
+            List<Object> row = List.of(timestamp, pageId, commentId, name, fromId, message, phone, 
+                                     postMessage, postUrl, postCreatedTime);
             ValueRange body = new ValueRange().setValues(List.of(row));
             
             sheets.spreadsheets().values()

@@ -34,3 +34,4 @@ build/
 
 # Application properties with secrets
 src/main/resources/application.properties
+service-account-key.json

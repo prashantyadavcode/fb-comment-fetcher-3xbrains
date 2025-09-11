@@ -46,7 +46,10 @@ public class SheetsTestController {
                     body.getOrDefault("name", ""),
                     body.getOrDefault("fromId", ""),
                     body.getOrDefault("message", ""),
-                    body.getOrDefault("phone", "")
+                    body.getOrDefault("phone", ""),
+                    body.getOrDefault("postMessage", ""),
+                    body.getOrDefault("postUrl", ""),
+                    body.getOrDefault("postCreatedTime", "")
             );
             logger.info("Append request completed successfully");
             return ResponseEntity.ok(Map.of("status", "ok"));

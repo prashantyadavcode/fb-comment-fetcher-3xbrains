@@ -1,14 +1,29 @@
 spring:
   application:
     name: demo
+  
+  # Redis Configuration
+  data:
+    redis:
+      host: ${REDIS_HOST:localhost}
+      port: ${REDIS_PORT:6379}
+      database: ${REDIS_DB:0}
+      password: ${REDIS_PASSWORD:}
+      timeout: ${REDIS_TIMEOUT:2000ms}
+      lettuce:
+        pool:
+          max-active: ${REDIS_POOL_MAX_ACTIVE:10}
+          max-idle: ${REDIS_POOL_MAX_IDLE:10}
+          min-idle: ${REDIS_POOL_MIN_IDLE:1}
+          max-wait: ${REDIS_POOL_MAX_WAIT:5000ms}
 
 app:
   fb:
     page-id: ${FB_PAGE_ID:681857498348124}
-    access-token: 
-    api-version: 
-    fetch-interval-seconds: 
+    access-token: "EAARhaOOGxrUBPf1UZC5CL9WBQftJaviE46alhnfn1Xgzxu1Lwm5APN2n9zyo9CgJ67b9WKkZBnT1mHi2ZCqXyEHiL29Xqfu9ZAjQwzJCZA4D3e54EdGDX6iI5c8DZAGaI4B5hiBKw86XZBOz6cNc8DkdLOZCkgDRiZCzE8zsLGi80ifzJ1FAX4BYVxbRJMQV4atCwC2as"
+    api-version: "v21.0"
+    fetch-interval-seconds: ${FB_FETCH_INTERVAL:60}
 
 google:
-  sheetId: ${GOOGLE_SHEET_ID:}
-  range: ${GOOGLE_SHEET_RANGE:Sheet1!A:G}
+  sheetId: ${GOOGLE_SHEET_ID:100_ZZcX6KPZoZ_d5HhW2QRrkLZj_S0kVHnPIBzl5UKI}
+  range: ${GOOGLE_SHEET_RANGE:Sheet1!A:J}

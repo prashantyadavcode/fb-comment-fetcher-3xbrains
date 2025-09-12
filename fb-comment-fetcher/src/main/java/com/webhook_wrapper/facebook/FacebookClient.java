@@ -22,7 +22,6 @@ public class FacebookClient {
         this.appProperties = appProperties;
         this.restTemplate = createConfiguredRestTemplate();
         
-        // Add system properties to help with network debugging
         System.setProperty("REDACTED", "true");
         System.setProperty("REDACTED", "dns,sun");
         
@@ -32,7 +31,6 @@ public class FacebookClient {
     private RestTemplate createConfiguredRestTemplate() {
         SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
         
-        // Set timeouts
         factory.setConnectTimeout(15000); // 15 seconds connection timeout
         factory.setReadTimeout(30000);    // 30 seconds read timeout
         
@@ -47,53 +45,22 @@ public class FacebookClient {
     }
     
     public Map<String, Object> fetchPostsAndComments(Long sinceTimestamp) {
-        StringBuilder postsUrl = new StringBuilder();
-        postsUrl.append("https://graph.facebook.com/")
-                .append(appProperties.getFb().getApiVersion()).append("/")
-                .append(appProperties.getFb().getPageId()).append("/posts")
-                .append("?fields=id,message,created_time")
-                .append("&access_token=")
-                .append(appProperties.getFb().getAccessToken());
+        System.out.println("Fetching all posts with comments from Facebook API");
 
-        if (sinceTimestamp != null && sinceTimestamp > 0) {
-            postsUrl.append("&since=").append(sinceTimestamp);
-            System.out.println("Fetching posts since timestamp: " + sinceTimestamp + " (" + java.time.Instant.ofEpochSecond(sinceTimestamp) + ")");
-        } else {
-            System.out.println("Fetching all posts (no timestamp filter)");
-        }
-
-        String postsUrlString = postsUrl.toString();
-        System.out.println("Making request to URL: " + postsUrlString);
-
-        Map<String, Object> postsResponse;
-        try {
-            URI postsUri;
-            try {
-                postsUri = new URI(postsUrlString);
-            } catch (java.net.URISyntaxException e) {
-                System.err.println("Invalid URL syntax (posts): " + postsUrlString);
-                throw new RuntimeException("Invalid Facebook posts URL: " + e.getMessage(), e);
-            }
-            ResponseEntity<Map> postsResp = restTemplate.exchange(
-                postsUri,
-                org.springframework.http.HttpMethod.GET,
-                new HttpEntity<>(new HttpHeaders()),
-                Map.class
-            );
-            postsResponse = postsResp.getBody();
-        } catch (Exception e) {
-            System.err.println("Error fetching posts: " + e.getMessage());
-            throw e;
-        }
-
-        if (postsResponse == null) {
+        Map<String, Object> postsResponse = fetchAllPosts();
+        
+        if (postsResponse == null || postsResponse.get("data") == null) {
+            System.out.println("No posts found in Facebook API response");
             return java.util.Collections.emptyMap();
         }
 
-        // Step 2: For each post, fetch comments separately and attach to match existing scheduler expectations
         Object dataObj = postsResponse.get("data");
         if (dataObj instanceof List<?>) {
             List<?> posts = (List<?>) dataObj;
+            System.out.println("Step 1: Successfully fetched " + posts.size() + " posts from Facebook API");
+            
+            System.out.println("Step 2: Fetching comments for each post individually...");
+            
             for (Object postObj : posts) {
                 if (!(postObj instanceof Map)) continue;
                 @SuppressWarnings("unchecked")
@@ -101,60 +68,85 @@ public class FacebookClient {
                 String postId = (String) post.get("id");
                 if (postId == null) continue;
 
-                List<Map<String, Object>> comments = fetchCommentsForPost(postId, sinceTimestamp);
+                List<Map<String, Object>> comments = fetchCommentsForPost(postId);
+                
                 Map<String, Object> commentsWrapper = new HashMap<>();
                 commentsWrapper.put("data", comments);
                 post.put("comments", commentsWrapper);
+                
+                System.out.println("Fetched " + comments.size() + " comments for post " + postId);
             }
+            
+            System.out.println("Completed n+1 API calls: 1 for posts + " + posts.size() + " for comments");
         }
 
         return postsResponse;
     }
+    
+    /**
+     * Step 1: Fetch all posts from the Facebook page (without comments)
+     */
+    private Map<String, Object> fetchAllPosts() {
+        String urlString = "https://graph.facebook.com/" + appProperties.getFb().getApiVersion() + "/" + 
+                          appProperties.getFb().getPageId() + "/posts" +
+                          "?fields=id,message,created_time,permalink_url" +
+                          "&access_token=" + appProperties.getFb().getAccessToken();
+        
+        System.out.println("Making posts API call: " + urlString);
 
-    private List<Map<String, Object>> fetchCommentsForPost(String postId, Long sinceTimestamp) {
-        StringBuilder commentsUrl = new StringBuilder();
-        commentsUrl.append("https://graph.facebook.com/")
-                .append(appProperties.getFb().getApiVersion()).append("/")
-                .append(postId).append("/comments")
-                .append("?fields=id,message,from,created_time")
-                .append("&access_token=")
-                .append(appProperties.getFb().getAccessToken());
-
-        if (sinceTimestamp != null && sinceTimestamp > 0) {
-            commentsUrl.append("&since=").append(sinceTimestamp);
-        }
-
-        String commentsUrlString = commentsUrl.toString();
         try {
-            URI commentsUri;
-            try {
-                commentsUri = new URI(commentsUrlString);
-            } catch (java.net.URISyntaxException e) {
-                System.err.println("Invalid URL syntax (comments): " + commentsUrlString);
-                throw new RuntimeException("Invalid Facebook comments URL: " + e.getMessage(), e);
-            }
+            URI postsUri = URI.create(urlString);
+            ResponseEntity<Map> postsResp = restTemplate.exchange(
+                postsUri,
+                HttpMethod.GET,
+                new HttpEntity<>(new HttpHeaders()),
+                Map.class
+            );
+            return postsResp.getBody();
+        } catch (Exception e) {
+            System.err.println("Error fetching posts: " + e.getMessage());
+            throw e;
+        }
+    }
+    
+    /**
+     * Step 2: Fetch comments for a specific post (this method will be called n times)
+     */
+    private List<Map<String, Object>> fetchCommentsForPost(String postId) {
+        String urlString = "https://graph.facebook.com/" + appProperties.getFb().getApiVersion() + "/" + 
+                          postId + "/comments" +
+                          "?fields=id,message,from,created_time" +
+                          "&access_token=" + appProperties.getFb().getAccessToken();
+        
+        System.out.println("Making comments API call for post " + postId + ": " + urlString);
+
+        try {
+            URI commentsUri = URI.create(urlString);
             ResponseEntity<Map> commentsResp = restTemplate.exchange(
                 commentsUri,
                 HttpMethod.GET,
                 new HttpEntity<>(new HttpHeaders()),
                 Map.class
             );
-            Map body = commentsResp.getBody();
+            
+            Map<String, Object> body = commentsResp.getBody();
             if (body == null) return new ArrayList<>();
+            
             Object data = body.get("data");
-            if (data instanceof java.util.List<?>) {
+            if (data instanceof List<?>) {
                 @SuppressWarnings("unchecked")
-                List<java.util.Map<String, Object>> list = (List<Map<String, Object>>) data;
-                return list;
+                List<Map<String, Object>> commentsList = (List<Map<String, Object>>) data;
+                return commentsList;
             }
         } catch (Exception e) {
             System.err.println("Error fetching comments for post " + postId + ": " + e.getMessage());
         }
+        
         return new ArrayList<>();
     }
+
     
     public Map<String, Object> fetchPostDetails(String postId) {
-        // Fetch individual post details with id, message, permalink_url, created_time
         String fieldsParam = "id,message,permalink_url,created_time";
         String urlString = String.format("https://graph.facebook.com/%s/%s?fields=%s&access_token=%s",
                 appProperties.getFb().getApiVersion(),

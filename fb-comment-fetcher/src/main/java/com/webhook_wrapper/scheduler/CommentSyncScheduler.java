@@ -32,12 +32,14 @@ public class CommentSyncScheduler {
     @Scheduled(fixedRateString = "#{${app.fb.fetch-interval-seconds} * 1000}")
     public void syncComments() {
         System.out.println("Starting scheduler....");
+        
+        long syncStartTime = java.time.Instant.now().getEpochSecond();
+        System.out.println("Sync started at: " + syncStartTime + " (" + java.time.Instant.ofEpochSecond(syncStartTime) + ")");
 
         long lastFetchTimestamp = timestampTracker.getLastFetchTimestamp();
         System.out.println("Last fetch timestamp: " + lastFetchTimestamp);
-        
-        // Fetch posts and comments since the last timestamp (or all if no previous timestamp)
-        Map<String, Object> response = fbClient.fetchPostsAndComments(lastFetchTimestamp > 0 ? lastFetchTimestamp : null);
+
+        Map<String, Object> response = fbClient.fetchPostsAndComments(null);
         System.out.println("Response: " + response);
         List<Map<String, Object>> posts = (List<Map<String, Object>>) response.get("data");
 
@@ -59,9 +61,25 @@ public class CommentSyncScheduler {
                             String commentId = (String) comment.get("id");
                             String createdTime = (String) comment.get("created_time");
                             
-                            if (isCommentNewerThanLastFetch(createdTime, lastFetchTimestamp)) {
+                            boolean isFirstRun = (lastFetchTimestamp <= 0);
+                            boolean isNewComment = false;
+                            
+                            if (isFirstRun) {
+                                isNewComment = true;
+                                System.out.println("FIRST RUN - Processing comment: " + commentId + " created at: " + createdTime);
+                            } else {
+                                isNewComment = isCommentNewerThanLastFetch(createdTime, lastFetchTimestamp);
+                                if (isNewComment) {
+                                    System.out.println("✓ NEW comment found: " + commentId + " created at: " + createdTime + 
+                                        " (after " + java.time.Instant.ofEpochSecond(lastFetchTimestamp) + ")");
+                                } else {
+                                    System.out.println("✗ OLD comment skipped: " + commentId + " created at: " + createdTime + 
+                                        " (before " + java.time.Instant.ofEpochSecond(lastFetchTimestamp) + ")");
+                                }
+                            }
+                            
+                            if (isNewComment) {
                                 comments.add(comment);
-                                System.out.println("Found new comment: " + commentId + " created at: " + createdTime);
                             }
                         }
                     }
@@ -133,10 +151,11 @@ public class CommentSyncScheduler {
             }
             
             if (totalCommentsProcessed > 0) {
-                timestampTracker.updateLastFetchTimestamp();
-                System.out.println("Successfully processed " + totalCommentsProcessed + " new comments. Timestamp updated.");
+                //System.out.println("Updating timestamp from " + lastFetchTimestamp + " to " + syncStartTime);
+                timestampTracker.updateLastFetchTimestamp(syncStartTime);
+                //System.out.println("✓ Successfully processed " + totalCommentsProcessed + " new comments and updated timestamp.");
             } else {
-                System.out.println("No new comments found to process.");
+                System.out.println("No new comments found to process. Timestamp unchanged: " + lastFetchTimestamp);
             }
         } else {
             System.out.println("No posts found in the API response.");
@@ -152,7 +171,6 @@ public class CommentSyncScheduler {
             return "";
         }
         
-        // Simple regex to find phone numbers (you can enhance this)
         String phoneRegex = "(\\+?\\d{1,3}[-\\s]?)?\\(?\\d{3}\\)?[-\\s]?\\d{3}[-\\s]?\\d{4}";
         java.util.regex.Pattern pattern = java.util.regex.Pattern.compile(phoneRegex);
         java.util.regex.Matcher matcher = pattern.matcher(message);
@@ -169,11 +187,11 @@ public class CommentSyncScheduler {
      */
     private String formatTimestamp(String facebookTimestamp) {
         try {
-            // Facebook timestamp format: "2025-08-30T10:00:00+0000"
-            Instant instant = Instant.parse(facebookTimestamp);
+            String normalizedTimestamp = facebookTimestamp.replaceAll("([+-]\\d{2})(\\d{2})$", "$1:$2");
+            Instant instant = Instant.parse(normalizedTimestamp);
             return DateTimeFormatter.ISO_INSTANT.format(instant);
         } catch (Exception e) {
-            // Fallback to current time if parsing fails
+            System.err.println("Error formatting timestamp '" + facebookTimestamp + "': " + e.getMessage());
             return DateTimeFormatter.ISO_INSTANT.format(Instant.now());
         }
     }
@@ -197,13 +215,17 @@ public class CommentSyncScheduler {
         }
         
         try {
-            Instant commentInstant = Instant.parse(commentCreatedTime);
+            String normalizedTimestamp = commentCreatedTime.replaceAll("([+-]\\d{2})(\\d{2})$", "$1:$2");
+            Instant commentInstant = Instant.parse(normalizedTimestamp);
             long commentTimestamp = commentInstant.getEpochSecond();
             
-            return commentTimestamp > lastFetchTimestamp;
+            boolean isNewer = commentTimestamp > lastFetchTimestamp;
+            System.out.println("Comment " + commentCreatedTime + " (" + commentTimestamp + ") vs lastFetch (" + lastFetchTimestamp + ") = " + (isNewer ? "NEWER" : "OLDER"));
+            
+            return isNewer;
         } catch (Exception e) {
             System.err.println("Error parsing comment timestamp '" + commentCreatedTime + "': " + e.getMessage());
-            return true;
+            return true; 
         }
     }
 }

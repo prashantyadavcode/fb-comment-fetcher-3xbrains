@@ -35,17 +35,27 @@ public class RedisTimestampTracker {
         try {
             Object timestampObj = redisTemplate.opsForValue().get(TIMESTAMP_KEY);
             if (timestampObj != null) {
-                long timestamp = Long.parseLong(timestampObj.toString());
-                System.out.println("Last fetch timestamp from Redis: " + timestamp + " (" + Instant.ofEpochSecond(timestamp) + ")");
-                return timestamp;
+                String timestampStr = timestampObj.toString().trim();
+                if (!timestampStr.isEmpty()) {
+                    long timestamp = Long.parseLong(timestampStr);
+                    System.out.println("✓ Successfully read timestamp from Redis: " + timestamp + " (" + Instant.ofEpochSecond(timestamp) + ")");
+                    return timestamp;
+                } else {
+                    System.out.println("Empty timestamp string in Redis");
+                }
+            } else {
+                System.out.println("Null timestamp object in Redis");
             }
+        } catch (NumberFormatException e) {
+            System.err.println("Error parsing timestamp from Redis - invalid number format: " + e.getMessage());
+            e.printStackTrace();
         } catch (Exception e) {
             System.err.println("Error reading last fetch timestamp from Redis: " + e.getMessage());
             e.printStackTrace();
         }
         
-        System.out.println("No previous fetch timestamp found in Redis, will fetch all data");
-        return 0; // If no timestamp exists, fetch all data
+        System.out.println("No valid previous fetch timestamp found in Redis, returning 0 (will fetch all data)");
+        return 0;
     }
     
     /**
@@ -65,24 +75,28 @@ public class RedisTimestampTracker {
         String lockValue = String.valueOf(System.currentTimeMillis());
         
         try {
-            // Acquire distributed lock
             Boolean lockAcquired = redisTemplate.opsForValue()
                 .setIfAbsent(LOCK_KEY, lockValue, LOCK_TIMEOUT_SECONDS, TimeUnit.SECONDS);
             
             if (Boolean.TRUE.equals(lockAcquired)) {
                 try {
-                    // Update timestamp while holding the lock
-                    redisTemplate.opsForValue().set(TIMESTAMP_KEY, epochSeconds);
-                    System.out.println("Updated last fetch timestamp in Redis to: " + epochSeconds + " (" + Instant.ofEpochSecond(epochSeconds) + ")");
+                    String timestampStr = String.valueOf(epochSeconds);
+                    redisTemplate.opsForValue().set(TIMESTAMP_KEY, timestampStr);
+                    System.out.println("✓ Successfully updated Redis timestamp with lock: " + epochSeconds);
+                    
+                    Object verification = redisTemplate.opsForValue().get(TIMESTAMP_KEY);
+                    System.out.println("Verification read: " + verification);
                 } finally {
-                    // Release lock (only if we still own it)
                     releaseLock(lockValue);
                 }
             } else {
                 System.out.println("WARNING: Could not acquire lock for timestamp update. Another instance may be updating the timestamp.");
-                // Fallback: try to update without lock (less safe but ensures progress)
-                redisTemplate.opsForValue().set(TIMESTAMP_KEY, epochSeconds);
-                System.out.println("Updated timestamp without lock (fallback): " + epochSeconds);
+                String timestampStr = String.valueOf(epochSeconds);
+                redisTemplate.opsForValue().set(TIMESTAMP_KEY, timestampStr);
+                System.out.println("✓ Updated timestamp without lock (fallback): " + epochSeconds);
+                
+                Object verification = redisTemplate.opsForValue().get(TIMESTAMP_KEY);
+                System.out.println("Verification read: " + verification);
             }
         } catch (Exception e) {
             System.err.println("Error updating last fetch timestamp in Redis: " + e.getMessage());
@@ -95,9 +109,8 @@ public class RedisTimestampTracker {
      */
     private void releaseLock(String lockValue) {
         try {
-            // Simple approach: just delete the lock (less safe but works)
-            String currentValue = (String) redisTemplate.opsForValue().get(LOCK_KEY);
-            if (lockValue.equals(currentValue)) {
+            Object currentValueObj = redisTemplate.opsForValue().get(LOCK_KEY);
+            if (currentValueObj != null && lockValue.equals(currentValueObj.toString())) {
                 redisTemplate.delete(LOCK_KEY);
                 System.out.println("Released timestamp lock");
             }
@@ -123,7 +136,7 @@ public class RedisTimestampTracker {
     public void reset() {
         try {
             redisTemplate.delete(TIMESTAMP_KEY);
-            redisTemplate.delete(LOCK_KEY); // Also remove any stale locks
+            redisTemplate.delete(LOCK_KEY);
             System.out.println("Redis timestamp tracker reset - next sync will fetch all data");
         } catch (Exception e) {
             System.err.println("Error resetting Redis timestamp tracker: " + e.getMessage());

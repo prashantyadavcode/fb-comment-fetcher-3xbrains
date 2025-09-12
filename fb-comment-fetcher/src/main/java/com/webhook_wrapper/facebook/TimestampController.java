@@ -125,12 +125,58 @@ public class TimestampController {
     public ResponseEntity<Map<String, Object>> updateToNow() {
         long now = Instant.now().getEpochSecond();
         timestampTracker.updateLastFetchTimestamp(now);
+    
+        long verifyTimestamp = timestampTracker.getLastFetchTimestamp();
+        boolean updateSuccessful = (verifyTimestamp == now);
         
         Map<String, Object> response = new HashMap<>();
         response.put("message", "Timestamp updated to current time");
         response.put("timestamp", now);
         response.put("instant", Instant.ofEpochSecond(now).toString());
-        response.put("status", "success");
+        response.put("verifiedTimestamp", verifyTimestamp);
+        response.put("updateSuccessful", updateSuccessful);
+        response.put("status", updateSuccessful ? "success" : "warning");
+        
+        if (!updateSuccessful) {
+            response.put("warning", "Timestamp update verification failed. Expected: " + now + ", Got: " + verifyTimestamp);
+        }
+        
+        return ResponseEntity.ok(response);
+    }
+    
+    /**
+     * Test Redis connection and basic read/write operations
+     * 
+     * @return Response with test results
+     */
+    @PostMapping("/test-redis")
+    public ResponseEntity<Map<String, Object>> testRedis() {
+        Map<String, Object> response = new HashMap<>();
+        
+        try {
+            // Test write
+            long testTimestamp = 1234567890L;
+            System.out.println("Testing Redis with timestamp: " + testTimestamp);
+            timestampTracker.updateLastFetchTimestamp(testTimestamp);
+            
+            // Test read
+            long readTimestamp = timestampTracker.getLastFetchTimestamp();
+            
+            boolean success = (readTimestamp == testTimestamp);
+            response.put("testWrite", testTimestamp);
+            response.put("testRead", readTimestamp);
+            response.put("success", success);
+            response.put("status", success ? "success" : "failed");
+            
+            if (!success) {
+                response.put("error", "Write/Read mismatch. Wrote: " + testTimestamp + ", Read: " + readTimestamp);
+            }
+            
+        } catch (Exception e) {
+            response.put("error", "Redis test failed: " + e.getMessage());
+            response.put("status", "failed");
+            response.put("success", false);
+        }
         
         return ResponseEntity.ok(response);
     }
